@@ -3,3 +3,99 @@ title: Data Cleaning
 format: typst
 ---
 
+
+```{r}
+library(tidyverse)
+library(readr)
+library(sf)
+library(tigris)
+library(dplyr)
+library(ggplot2)
+library(stats)
+
+precinct_2024_general_election <- read.csv("data/g24_sov_by_g24_svprec.csv")
+```
+
+```{r}
+
+simpler_precinct <- precinct_2024_general_election |>
+    select("COUNTY", "TOTVOTE", "CDDIST", "ASSDEM01", "ASSDEM02", "ASSREP01",
+    "ASSREP02", "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02",
+    "PRSDEM01",  "PRSREP01", "SENDEM01", "SENDEM02",
+    "SENREP01", "SENREP02", "USSDEM01", "USSREP01") |>
+        filter(
+            !if_any(
+                .cols = -COUNTY, 
+                .fns = ~ . == "***"
+                )) |>
+                    mutate(
+                        across(
+                            .cols = -COUNTY, 
+                            .fns = ~ as.integer(as.character(.))
+                        )
+                    )
+
+```
+
+
+Second Part
+
+
+```{r}
+votes_sr <- read_csv("data/state_g24_sov_data_by_g24_srprec.csv") 
+block_corr <- read_csv("data/state_g24_sr_blk_map.csv")
+new_district_map <- read_csv("data/ab604.csv")
+```
+
+
+```{r}
+votes_sr <- votes_sr |>
+    select(SRPREC_KEY, CNGDEM01, CNGREP01)
+block_corr <- block_corr |>
+    select(BLOCK_KEY, SRPREC_KEY, PCTSRPREC)
+new_district_map <- read_csv(
+    "data/ab604.csv",
+    col_names = c("BLOCK_KEY", "NEW_CD"),
+  ) |>
+  mutate(BLOCK_KEY = as.character(BLOCK_KEY)) |>
+  select(BLOCK_KEY, NEW_CD)
+
+```
+
+
+```{r}
+allocated_data <- block_corr |>
+  left_join(votes_sr, by = "SRPREC_KEY") |>
+  mutate(
+    CNGDEM01 = as.numeric(CNGDEM01),
+    CNGREP01 = as.numeric(CNGREP01),
+    
+    PCTSRPREC = as.numeric(PCTSRPREC)
+  ) |>
+  
+  mutate(
+    D_Allocated = CNGDEM01 * (PCTSRPREC / 100), 
+    R_Allocated = CNGREP01 * (PCTSRPREC / 100)
+  )
+
+
+
+final_results_ab604 <- allocated_data |>
+  left_join(new_district_map, by = "BLOCK_KEY") |>
+  filter(!is.na(NEW_CD)) |>
+  group_by(NEW_CD) |>
+  
+  summarise(
+    New_D_Votes = sum(D_Allocated, na.rm = TRUE),
+    New_R_Votes = sum(R_Allocated, na.rm = TRUE),
+    .groups = 'drop'
+  ) |>
+  
+  mutate(
+    New_Total = New_D_Votes + New_R_Votes,
+    New_D_Pct = New_D_Votes / New_Total,
+    New_Winner = ifelse(New_D_Votes > New_R_Votes, "DEM", "REP")
+  )
+
+final_results_ab604
+```

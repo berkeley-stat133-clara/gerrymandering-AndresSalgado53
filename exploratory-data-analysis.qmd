@@ -3,26 +3,109 @@ title: Exploratory Data Analysis
 format: typst
 ---
 
+```{r}
+library(tidyverse)
+library(readr)
+library(sf)
+library(tigris)
+library(dplyr)
+library(ggplot2)
+library(stats)
+precinct_2024_general_election <- read.csv("data/g24_sov_by_g24_svprec.csv")
+
+simpler_precinct <- precinct_2024_general_election |>
+    select("COUNTY", "TOTVOTE", "CDDIST", "ASSDEM01", "ASSDEM02", "ASSREP01",
+    "ASSREP02", "CNGDEM01", "CNGDEM02", "CNGREP01", "CNGREP02",
+    "PRSDEM01",  "PRSREP01", "SENDEM01", "SENDEM02",
+    "SENREP01", "SENREP02", "USSDEM01", "USSREP01") |>
+        filter(
+            !if_any(
+                .cols = -COUNTY, 
+                .fns = ~ . == "***"
+                )) |>
+                    mutate(
+                        across(
+                            .cols = -COUNTY, 
+                            .fns = ~ as.integer(as.character(.))
+                        )
+                    )
+
+
+```
+
 ### Question 1
 
-Put your question here.
+How many votes for the presidential democrat vs republican candidate had a less than 1 percent difference in vote count between them?
 
 ### Answer 1
 
-Put your answer here.
+```{r}
+closest_race_analysis <- simpler_precinct |>
+
+  mutate(
+    Contest_Total = PRSDEM01 + PRSREP01,
+    Raw_Difference = abs(PRSDEM01 - PRSREP01),
+    Pct_Margin = (Raw_Difference / Contest_Total) * 100
+  )
+
+closest_precinct <- closest_race_analysis |>
+  arrange(Pct_Margin)
+```
+
+```{r}
+count_under_1_percent <- closest_race_analysis |>
+  filter(Pct_Margin < 1) |>
+  count()
+count_under_1_percent
+```
+
+782
+
 
 ### Question 2
 
-Put your question here.
+What is the range of total sizes of the precincts? 
 
 ### Answer 2
 
-Put your answer here.
+```{r}
+precinct_size_summary <- simpler_precinct |>
+  summarise(
+    Min_Total_Votes = min(TOTVOTE),
+    Max_Total_Votes = max(TOTVOTE),
+    Mean_Total_Votes = mean(TOTVOTE),
+    Median_Total_Votes = median(TOTVOTE),
+    Range_of_Votes = Max_Total_Votes - Min_Total_Votes
+  )
+print(precinct_size_summary)
+```
+
+The range goes from a vote count of 0 to 3793980, with a mean of 2424.274 votes and median of 121 votes.
 
 ### Question 3
 
-Put your question here.
+How large were the largest counties and how small were the smallest?
 
 ### Answer 3
 
-Put your answer here.
+
+```{r}
+county_precinct_counts <- simpler_precinct |>
+  group_by(COUNTY) |>
+  count(name = "Precinct_Count") |>
+  arrange(desc(Precinct_Count))
+print(county_precinct_counts)
+```
+
+Largest county is labeled county 19 with 5937 precincts.
+
+
+```{r}
+county_precinct_counts <- simpler_precinct |>
+  group_by(COUNTY) |>
+  count(name = "Precinct_Count") |>
+  arrange((Precinct_Count))
+print(county_precinct_counts)
+```
+
+Smallest is county 2 with 19 precincts.
